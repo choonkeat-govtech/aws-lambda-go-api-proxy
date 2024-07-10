@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -115,7 +114,13 @@ func (r *RequestAccessorALB) EventToRequest(req events.ALBTargetGroupRequest) (*
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	serverAddress := "https://" + req.Headers["host"]
+
+	var serverAddress string
+	if req.MultiValueHeaders != nil && len(req.MultiValueHeaders["host"]) > 0 {
+		serverAddress = "https://" + req.MultiValueHeaders["host"][0]
+	} else if req.Headers != nil && len(req.Headers["host"]) > 0 {
+		serverAddress = "https://" + req.Headers["host"]
+	}
 	//  if customAddress, ok := os.LookupEnv(CustomHostVariable); ok {
 	//  	serverAddress = customAddress
 	//  }
@@ -128,7 +133,7 @@ func (r *RequestAccessorALB) EventToRequest(req events.ALBTargetGroupRequest) (*
 				if queryString != "" {
 					queryString += "&"
 				}
-				queryString += url.QueryEscape(q) + "=" + url.QueryEscape(v)
+				queryString += q + "=" + v // values are raw and already escaped
 			}
 		}
 		path += "?" + queryString
@@ -140,7 +145,7 @@ func (r *RequestAccessorALB) EventToRequest(req events.ALBTargetGroupRequest) (*
 			if queryString != "" {
 				queryString += "&"
 			}
-			queryString += url.QueryEscape(q) + "=" + url.QueryEscape(req.QueryStringParameters[q])
+			queryString += q + "=" + req.QueryStringParameters[q]
 		}
 		path += "?" + queryString
 	}

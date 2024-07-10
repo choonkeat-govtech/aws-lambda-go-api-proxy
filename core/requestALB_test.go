@@ -37,6 +37,7 @@ var _ = Describe("RequestAccessorALB tests", func() {
 		It("Correctly converts a basic event", func() {
 			httpReq, err := accessor.EventToRequestWithContext(context.Background(), basicRequest)
 			Expect(err).To(BeNil())
+			Expect("lambda-test-alb-1234567.us-east-1.elb.amazonaws.com").To(Equal(httpReq.Host))
 			Expect("/hello").To(Equal(httpReq.URL.Path))
 			Expect("/hello?UniqueId=12345").To(Equal(httpReq.RequestURI))
 			Expect("GET").To(Equal(httpReq.Method))
@@ -73,39 +74,40 @@ var _ = Describe("RequestAccessorALB tests", func() {
 		})
 
 		mqsRequest := getALBProxyRequest("/hello", "GET", getALBRequestContext(), false, hdr, bdy, qs, mvh, nil)
-		mqsRequest.QueryStringParameters = map[string]string{
-			"hello": "1",
-			"world": "2",
+		mqsRequest.MultiValueQueryStringParameters = map[string][]string{
+			"hello": {"1%202", "2"},
+			"world": {"a%20b", "b"},
 		}
 		It("Populates multiple value query string correctly", func() {
 			httpReq, err := accessor.EventToRequestWithContext(context.Background(), mqsRequest)
 			Expect(err).To(BeNil())
 			Expect("/hello").To(Equal(httpReq.URL.Path))
-			Expect(httpReq.RequestURI).To(ContainSubstring("hello=1"))
-			Expect(httpReq.RequestURI).To(ContainSubstring("world=2"))
+			Expect(httpReq.RequestURI).To(ContainSubstring("hello=1%202"))
+			Expect(httpReq.RequestURI).To(ContainSubstring("hello=2"))
+			Expect(httpReq.RequestURI).To(ContainSubstring("world=a%20b"))
+			Expect(httpReq.RequestURI).To(ContainSubstring("world=b"))
 			Expect("GET").To(Equal(httpReq.Method))
 
 			query := httpReq.URL.Query()
 			Expect(2).To(Equal(len(query)))
 			Expect(query["hello"]).ToNot(BeNil())
 			Expect(query["world"]).ToNot(BeNil())
-			Expect(1).To(Equal(len(query["hello"])))
-			Expect("1").To(Equal(query["hello"][0]))
-			Expect("2").To(Equal(query["world"][0]))
-
+			Expect(2).To(Equal(len(query["hello"])))
+			Expect([]string{"1 2", "2"}).To(Equal(query["hello"]))
+			Expect([]string{"a b", "b"}).To(Equal(query["world"]))
 		})
 
 		qsRequest := getALBProxyRequest("/hello", "GET", getALBRequestContext(), false, hdr, bdy, qs, mvh, nil)
 		qsRequest.QueryStringParameters = map[string]string{
-			"hello": "1",
-			"world": "2",
+			"hello": "1%202",
+			"world": "2%203",
 		}
 		It("Populates query string correctly", func() {
 			httpReq, err := accessor.EventToRequestWithContext(context.Background(), qsRequest)
 			Expect(err).To(BeNil())
 			Expect("/hello").To(Equal(httpReq.URL.Path))
-			Expect(httpReq.RequestURI).To(ContainSubstring("hello=1"))
-			Expect(httpReq.RequestURI).To(ContainSubstring("world=2"))
+			Expect(httpReq.RequestURI).To(ContainSubstring("hello=1%202"))
+			Expect(httpReq.RequestURI).To(ContainSubstring("world=2%203"))
 			Expect("GET").To(Equal(httpReq.Method))
 
 			query := httpReq.URL.Query()
@@ -114,8 +116,8 @@ var _ = Describe("RequestAccessorALB tests", func() {
 			Expect(query["world"]).ToNot(BeNil())
 			Expect(1).To(Equal(len(query["hello"])))
 			Expect(1).To(Equal(len(query["world"])))
-			Expect("1").To(Equal(query["hello"][0]))
-			Expect("2").To(Equal(query["world"][0]))
+			Expect("1 2").To(Equal(query["hello"][0]))
+			Expect("2 3").To(Equal(query["world"][0]))
 		})
 
 		// If multivaluehaders are set then it only passes the multivalue headers to the http.Request
@@ -128,6 +130,7 @@ var _ = Describe("RequestAccessorALB tests", func() {
 		It("Populates multiple value headers correctly", func() {
 			httpReq, err := accessor.EventToRequestWithContext(context.Background(), mvhRequest)
 			Expect(err).To(BeNil())
+			Expect("lambda-test-alb-1234567.us-east-1.elb.amazonaws.com").To(Equal(httpReq.Host))
 			Expect("/hello").To(Equal(httpReq.URL.Path))
 			Expect("GET").To(Equal(httpReq.Method))
 
@@ -137,13 +140,13 @@ var _ = Describe("RequestAccessorALB tests", func() {
 			for k, value := range headers {
 				Expect(value).To(Equal(mvhRequest.MultiValueHeaders[strings.ToLower(k)]))
 			}
-
 		})
 		// If multivaluehaders are set then it only passes the multivalue headers to the http.Request
 		svhRequest := getALBProxyRequest("/hello", "GET", getALBRequestContext(), false, hdr, bdy, qs, mvh, mvqs)
 		svhRequest.Headers = map[string]string{
 			"header1": "Testhdr1",
-			"header2": "Testhdr2"}
+			"header2": "Testhdr2",
+		}
 
 		It("Populates single value headers correctly", func() {
 			httpReq, err := accessor.EventToRequestWithContext(context.Background(), svhRequest)
